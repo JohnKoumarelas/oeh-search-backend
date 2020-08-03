@@ -12,7 +12,7 @@ from converter.env import Env
 
 BOT_NAME = 'converter_search_idx'
 
-SPIDER_MODULES = ['converter.spiders']
+SPIDER_MODULES = ['converter.spiders', 'converter.offline_mode']
 NEWSPIDER_MODULE = 'converter.spiders'
 
 LOG_FILE = Env.get("LOG_FILE", True)

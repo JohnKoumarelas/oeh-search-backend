@@ -1,4 +1,6 @@
+import urllib
 from datetime import datetime
+from urllib.parse import urlencode, quote_plus
 
 import xmltodict as xmltodict
 from lxml import etree
@@ -6,6 +8,7 @@ from scrapy.spiders import CrawlSpider
 
 from converter.constants import Constants
 from converter.items import *
+from converter.offline_mode.merlin_spider_offline import encode_url_for_local
 from converter.spiders.lom_base import LomBase
 
 
@@ -22,16 +25,19 @@ class MerlinSpider(CrawlSpider, LomBase):
     friendlyName = 'Merlin'  # name as shown in the search ui
     version = '0.1'  # the version of your crawler, used to identify if a reimport is necessary
     apiUrl = 'https://merlin.nibis.de/index.php?action=resultXml&start=%start&anzahl=%anzahl&query[stichwort]=*'     # * regular expression, to represent all possible values.
+    #apiUrl = 'http://localhost:8888/index.php?action=resultXml&start=%start&anzahl=%anzahl&query[stichwort]=*'     # * regular expression, to represent all possible values.
 
     limit = 100
     page = 0
+
+    elements_count = 0
 
     def __init__(self, **kwargs):
         LomBase.__init__(self, **kwargs)
 
     def start_requests(self):
         yield scrapy.Request(url=self.apiUrl.replace('%start', str(self.page * self.limit))
-                              .replace('%anzahl', str(self.limit)),
+                                                      .replace('%anzahl', str(self.limit)),
                               callback=self.parse, headers={
                 'Accept': 'application/xml',
                 'Content-Type': 'application/xml'
@@ -48,6 +54,8 @@ class MerlinSpider(CrawlSpider, LomBase):
         # <?xml version="1.0" encoding="utf-8"?>
         root = etree.XML(response.body)
         tree = etree.ElementTree(root)
+
+        elements_total = tree.xpath('/root/sum')
 
         # If results are returned.
         elements = tree.xpath('/root/items/*')
@@ -73,11 +81,14 @@ class MerlinSpider(CrawlSpider, LomBase):
                 # LomBase.parse() has to be called for every individual instance that needs to be saved to the database.
                 LomBase.parse(self, copyResponse)
 
+        self.elements_count += len(elements)
+
         # TODO: To not stress the Rest APIs.
         # time.sleep(0.1)
 
         # If the number of returned results is equal to the imposed limit, it means that there are more to be returned.
-        if len(elements) == self.limit:
+        # if len(elements) == self.limit:
+        if self.elements_count < elements_total:
             self.page += 1
             url = self.apiUrl.replace('%start', str(self.page * self.limit)).replace('%anzahl', str(self.limit))
             yield scrapy.Request(url=url, callback=self.parse, headers={
@@ -92,7 +103,8 @@ class MerlinSpider(CrawlSpider, LomBase):
         """ Since we have no 'last_modified' date from the elements we cannot do something better.
             Therefore, the current implementation takes into account (1) the code version, (2) the item's ID, and (3)
             the date (day, month, year). """
-        return hash(self.version) + hash(self.getId(response)) + self._date_to_integer(datetime.date(datetime.now()))
+        # return hash(self.version) + hash(self.getId(response)) + self._date_to_integer(datetime.date(datetime.now()))
+        return hash(self.version) + hash(self.getId(response))
 
     def _date_to_integer(self, dt_time):
         """ Converting the date to an integer, so it is useful in the getHash method

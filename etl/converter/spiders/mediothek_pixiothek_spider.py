@@ -43,6 +43,7 @@ class MediothekPixiothekSpider(CrawlSpider, LomBase):
             if self.hasChanged(copyResponse):
                 yield self.handleEntry(copyResponse)
 
+            time.sleep(2)
             # LomBase.parse() has to be called for every individual instance that needs to be saved to the database.
             LomBase.parse(self, copyResponse)
 
